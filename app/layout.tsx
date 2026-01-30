@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Outfit } from "next/font/google";
+import { AppProviders } from "@/components/providers/AppProviders";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -9,7 +10,8 @@ const outfit = Outfit({
 
 export const metadata: Metadata = {
   title: "Academia Nutricional",
-  description: "Sua jornada para uma alimentação mais saudável",
+  description: "Consistência diária, do seu jeito. Treino, refeições e bem-estar.",
+  manifest: "/manifest",
 };
 
 export default function RootLayout({
@@ -20,7 +22,7 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body className={`${outfit.variable} font-sans antialiased`}>
-        {children}
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );

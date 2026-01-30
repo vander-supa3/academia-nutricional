@@ -1,6 +1,6 @@
-# Passo a passo: Git e Supabase
+# Passo a passo: Git, Supabase e Vercel
 
-Guia para conectar o projeto **Academia Nutricional** ao Git (GitHub/GitLab) e ao Supabase.
+Guia para conectar o projeto **Academia Nutricional** ao Git (GitHub), Supabase e Vercel.
 
 ---
 
@@ -106,7 +106,56 @@ Com o `.env.local` preenchido:
 npm run dev
 ```
 
-O app já está configurado para usar o cliente Supabase. Quando você criar telas que usem `createBrowserClient()` (ou o helper do projeto), a conexão será feita automaticamente com essas variáveis.
+O app já está configurado para usar o cliente Supabase. Quando você criar telas que usem o cliente em `lib/supabase.ts`, a conexão será feita automaticamente com essas variáveis.
+
+---
+
+## Parte 3 — Conectar ao Vercel (deploy)
+
+### 3.1 Criar conta e importar o projeto
+
+1. Acesse [vercel.com](https://vercel.com) e faça login (ou crie conta). Use **"Continue with GitHub"** para vincular ao mesmo usuário do repositório.
+2. No dashboard, clique em **"Add New..."** → **"Project"**.
+3. Na lista de repositórios, encontre **`vander-supa3/academia-nutricional`** (ou o nome do seu repo) e clique em **"Import"**.
+
+### 3.2 Configurar o projeto
+
+1. **Project Name:** pode deixar `academia-nutricional` (ou alterar).
+2. **Framework Preset:** o Vercel deve detectar **Next.js** automaticamente.
+3. **Root Directory:** deixe em branco (raiz do repo).
+4. **Build and Output Settings:** pode deixar o padrão (`npm run build`).
+
+### 3.3 Adicionar variáveis de ambiente (Supabase)
+
+Para o app funcionar em produção com o Supabase, adicione as mesmas variáveis que estão no seu `.env.local`:
+
+1. Na tela de import/configure, expanda **"Environment Variables"**.
+2. Adicione duas variáveis (use os valores do seu `.env.local` ou do painel do Supabase → Settings → API):
+
+| Name | Value |
+|------|--------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Sua Project URL (ex.: `https://xxxxx.supabase.co`) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Sua chave **anon public** |
+
+3. Marque **Production**, **Preview** e **Development** para cada uma (ou pelo menos Production).
+4. Clique em **"Deploy"**.
+
+### 3.4 Aguardar o deploy
+
+O Vercel vai clonar o repo, instalar dependências, rodar `npm run build` e publicar. Em 1–2 minutos você recebe um link do tipo:
+
+`https://academia-nutricional-xxx.vercel.app`
+
+Cada novo **push** na branch **main** no GitHub dispara um deploy automático.
+
+### 3.5 Resumo Vercel
+
+| O que fazer | Onde |
+|-------------|------|
+| Login / conta | vercel.com → Continue with GitHub |
+| Importar projeto | Add New → Project → Import `vander-supa3/academia-nutricional` |
+| Variáveis Supabase | Environment Variables na tela de deploy |
+| Deploy automático | Todo push em `main` no GitHub |
 
 ---
 
@@ -120,7 +169,8 @@ O app já está configurado para usar o cliente Supabase. Quando você criar tel
 | Projeto Supabase | supabase.com → New Project |
 | URL e anon key | Supabase → Settings → API |
 | Chaves no seu PC | Arquivo `.env.local` na raiz do projeto |
-| Chaves no deploy | GitHub Secrets / Variáveis do Vercel (ou outro) |
+| Chaves no deploy | Variáveis de ambiente no Vercel (Environment Variables) |
+| Deploy em produção | Vercel → Import repo GitHub → Configurar env → Deploy |
 
 ---
 
