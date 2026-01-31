@@ -20,9 +20,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         router.replace("/login");
         return;
       }
+      if (pathname !== "/onboarding") {
+        const { data: anamnesis } = await supabase
+          .from("user_anamnesis")
+          .select("id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (!anamnesis) {
+          router.replace("/onboarding");
+          return;
+        }
+      }
       setChecking(false);
     })();
-  }, [router]);
+  }, [router, pathname]);
 
   useEffect(() => {
     const {
