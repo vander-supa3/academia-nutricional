@@ -10,6 +10,8 @@ export async function offlineUpsertDailyLog(payload: {
   workout_done?: boolean;
   meals_logged?: boolean;
   weight_kg?: number | null;
+  fasting_today?: boolean;
+  fasting_window?: string | null;
 }) {
   await enqueue({
     id: uid(),

@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { ensureUserSeed } from "@/lib/ensureSeed";
 import { toast } from "sonner";
 import { offlineUpsertDailyLog } from "@/lib/offline/mutations";
+import { Badge } from "@/components/ui/Badge";
 
 type Plan = {
   id: string;
@@ -33,6 +34,8 @@ export function TodayPage() {
   const [progress, setProgress] = useState({ streak: 5, weeklyDelta: "-1,2 kg" });
   const [loading, setLoading] = useState(true);
   const [seedLoading, setSeedLoading] = useState(false);
+  const [fastingEnabled, setFastingEnabled] = useState(false);
+  const [fastingToday, setFastingToday] = useState(false);
 
   const todayIndex = useMemo(() => {
     const d = new Date();
@@ -82,18 +85,62 @@ export function TodayPage() {
     const todayStr = new Date().toISOString().slice(0, 10);
     const { data: log } = await supabase
       .from("daily_logs")
-      .select("water_ml")
+      .select("water_ml, fasting_today")
       .eq("user_id", user.id)
       .eq("date", todayStr)
       .maybeSingle();
     if (log?.water_ml != null) {
       setWater((w) => ({ ...w, current: log.water_ml }));
     }
+    if (log?.fasting_today != null) {
+      setFastingToday(!!log.fasting_today);
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("fasting_enabled")
+      .eq("id", user.id)
+      .maybeSingle();
+    setFastingEnabled(!!profile?.fasting_enabled);
 
     setLoading(false);
   }, [todayIndex]);
 
   const today = new Date().toISOString().slice(0, 10);
+
+  async function saveFastingToday(value: boolean) {
+    const online = typeof navigator !== "undefined" && navigator.onLine;
+    if (!online) {
+      await offlineUpsertDailyLog({ date: today, fasting_today: value });
+      setFastingToday(value);
+      toast.success("Salvo offline. Sincroniza quando voltar a conexão.");
+      return;
+    }
+    const {
+      data: { user: u },
+    } = await supabase.auth.getUser();
+    if (!u) return;
+    const { data: existing } = await supabase
+      .from("daily_logs")
+      .select("water_ml, workout_done, meals_logged, weight_kg")
+      .eq("user_id", u.id)
+      .eq("date", today)
+      .maybeSingle();
+    const payload = {
+      user_id: u.id,
+      date: today,
+      ...(existing ?? {}),
+      fasting_today: value,
+    };
+    const { error } = await supabase.from("daily_logs").upsert(payload, {
+      onConflict: "user_id,date",
+    });
+    if (!error) {
+      setFastingToday(value);
+    } else {
+      toast.error("Erro ao salvar.");
+    }
+  }
 
   async function saveWater(water_ml: number) {
     const online = typeof navigator !== "undefined" && navigator.onLine;
@@ -155,7 +202,12 @@ export function TodayPage() {
   return (
     <div className="space-y-4">
       <section className="border border-border rounded-xl shadow-sm p-4 transition duration-250">
-        <div className="text-sm text-zinc-500">📋 Plano de hoje</div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm text-zinc-500">📋 Plano de hoje</span>
+          {fastingEnabled && (
+            <Badge tone="warning" className="text-[10px]">Jejum opcional</Badge>
+          )}
+        </div>
         {loading ? (
           <div className="mt-1 font-semibold">Carregando...</div>
         ) : plan ? (
@@ -178,6 +230,35 @@ export function TodayPage() {
           </div>
         )}
       </section>
+
+      {fastingEnabled && (
+        <section className="rounded-xl border border-amber-200 bg-amber-50/80 p-4">
+          <div className="flex items-center gap-2 text-sm text-amber-900/90">
+            <span className="font-medium">Dia com jejum (opcional)</span>
+          </div>
+          <p className="mt-1 text-xs text-amber-800/80 leading-relaxed">
+            Ao quebrar o jejum, priorize proteína, fibra e água. Este app não prescreve regime.
+          </p>
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <span className="text-sm text-amber-900/90">Hoje fiz jejum</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={fastingToday}
+              onClick={() => saveFastingToday(!fastingToday)}
+              className={`relative inline-flex h-7 w-12 shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500/30 ${
+                fastingToday ? "bg-amber-500" : "bg-zinc-200"
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition ${
+                  fastingToday ? "translate-x-5" : "translate-x-0.5"
+                }`}
+              />
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className="border border-border rounded-xl shadow-sm p-4">
         <div className="text-sm text-zinc-500">🍽️ Refeições</div>

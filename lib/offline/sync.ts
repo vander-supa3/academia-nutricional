@@ -16,8 +16,15 @@ export async function syncOfflineQueue(): Promise<{ synced: number }> {
   for (const m of toSync) {
     if (m.type === "UPSERT_DAILY_LOG") {
       const { date, ...rest } = m.payload;
+      const { data: existing } = await supabase
+        .from("daily_logs")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("date", date)
+        .maybeSingle();
+      const merged = { ...(existing ?? {}), ...rest };
       const { error } = await supabase.from("daily_logs").upsert(
-        { user_id: user.id, date, ...rest },
+        { user_id: user.id, date, ...merged },
         { onConflict: "user_id,date" }
       );
       if (!error) syncedIds.push(m.id);

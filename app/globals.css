@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Suaviza o rendering e dá cara premium */
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 :root {
   --foreground: #0f172a;
   --background: #f8fafc;

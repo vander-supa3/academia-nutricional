@@ -41,7 +41,10 @@ export function MealsPage() {
         key: "recipes",
         fetcher: async () => {
           const { data, error: e } = await supabase.from("recipes").select("*").order("meal_type", { ascending: true });
-          if (e) throw e;
+          if (e) {
+            console.error("Supabase recipes error:", e);
+            throw e;
+          }
           return (data ?? []) as Recipe[];
         },
       });
@@ -111,6 +114,9 @@ export function MealsPage() {
         <div className="border border-border rounded-xl shadow-card p-4 space-y-3">
           <p className="text-sm text-red-600">
             Erro ao carregar receitas. Confira: (1) Tabela &quot;recipes&quot; existe no Supabase? (rode <code className="text-xs bg-zinc-100 px-1 rounded">supabase/schema.sql</code>), (2) Rodou <code className="text-xs bg-zinc-100 px-1 rounded">npm run seed:global</code>? (3) Conexão com a internet.
+          </p>
+          <p className="text-xs font-mono text-red-700 bg-red-50 border border-red-200 rounded-lg p-2 break-all">
+            Causa: {(error as Error)?.message ?? String(error)}
           </p>
           <button
             type="button"

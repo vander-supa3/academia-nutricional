@@ -15,14 +15,16 @@ export function useAutoSync() {
       ran.current = true;
       syncOfflineQueue()
         .then((r) => {
-          if (r.synced > 0) toast.success(`Sincronizado: ${r.synced} atualização(ões)`);
+          if (r.synced === 1) toast.success("Sincronizado com sucesso.");
+          if (r.synced > 1) toast.success(`Sincronizado: ${r.synced} atualizações.`);
         })
         .catch(() => {});
       return;
     }
     syncOfflineQueue()
       .then((r) => {
-        if (r.synced > 0) toast.success(`Sincronizado: ${r.synced} atualização(ões)`);
+        if (r.synced === 1) toast.success("Sincronizado com sucesso.");
+        if (r.synced > 1) toast.success(`Sincronizado: ${r.synced} atualizações.`);
       })
       .catch(() => {});
   }, [online]);
