@@ -246,12 +246,15 @@ export async function getConsumedToday(
     const kcal = Array.isArray(r) ? r[0]?.kcal : r?.kcal;
     return sum + (kcal ?? 0);
   }, 0);
-  const list = rawList.map(({ meal_type, recipe_id, user_meal_plan_item_id, recipes: r }) => ({
-    meal_type,
-    recipe_id,
-    user_meal_plan_item_id,
-    recipes: Array.isArray(r) ? r[0] : r,
-  }));
+  const list = rawList.map(({ meal_type, recipe_id, user_meal_plan_item_id, recipes: r }) => {
+    const recipes = Array.isArray(r) ? r[0] : r;
+    return {
+      meal_type,
+      recipe_id,
+      user_meal_plan_item_id,
+      recipes: recipes ?? undefined,
+    };
+  });
   const consumedItemIds = Array.from(
     new Set(list.map((l) => l.user_meal_plan_item_id).filter((id): id is string => Boolean(id)))
   );
