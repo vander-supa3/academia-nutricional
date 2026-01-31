@@ -115,16 +115,17 @@ export async function POST(req: Request) {
               });
             }
 
-            run = await openai.beta.threads.runs.submitToolOutputs(
-              threadId,
-              run.id,
-              { tool_outputs: outputs }
-            );
+            run = await openai.beta.threads.runs.submitToolOutputs(run.id, {
+              thread_id: threadId,
+              tool_outputs: outputs,
+            });
             continue;
           }
 
           await sleep(800);
-          run = await openai.beta.threads.runs.retrieve(threadId, run.id);
+          run = await openai.beta.threads.runs.retrieve(run.id, {
+              thread_id: threadId,
+            });
         }
 
         const msgs = await openai.beta.threads.messages.list(threadId, {
