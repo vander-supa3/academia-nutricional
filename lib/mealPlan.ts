@@ -234,13 +234,24 @@ export async function getConsumedToday(
     .eq("user_id", userId)
     .eq("date", date);
 
-  const list = (logs ?? []) as Array<{
+  type LogRow = {
     meal_type: string;
     recipe_id: string;
     user_meal_plan_item_id?: string;
-    recipes?: { kcal: number | null };
-  }>;
-  const totalKcal = list.reduce((sum, l) => sum + (l.recipes?.kcal ?? 0), 0);
+    recipes?: { kcal: number | null } | { kcal: number | null }[] | null;
+  };
+  const rawList = (logs ?? []) as LogRow[];
+  const totalKcal = rawList.reduce((sum, l) => {
+    const r = l.recipes;
+    const kcal = Array.isArray(r) ? r[0]?.kcal : r?.kcal;
+    return sum + (kcal ?? 0);
+  }, 0);
+  const list = rawList.map(({ meal_type, recipe_id, user_meal_plan_item_id, recipes: r }) => ({
+    meal_type,
+    recipe_id,
+    user_meal_plan_item_id,
+    recipes: Array.isArray(r) ? r[0] : r,
+  }));
   const consumedItemIds = [...new Set(list.map((l) => l.user_meal_plan_item_id).filter(Boolean))] as string[];
   return { totalKcal, consumedItemIds, logs: list };
 }
