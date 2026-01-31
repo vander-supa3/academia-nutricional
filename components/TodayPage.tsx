@@ -3,6 +3,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { ensureUserSeed } from "@/lib/ensureSeed";
+import {
+  getTodayPlan,
+  getConsumedToday,
+  getNote,
+  saveNotes,
+  swapMealItem,
+  consumeMeal,
+  unconsumeMeal,
+  getSuggestionsForSwap,
+  type UserMealPlanItem,
+  type Anamnesis,
+} from "@/lib/mealPlan";
+import { ensureMealPlan } from "@/lib/ensureMealPlan";
 import { toast } from "sonner";
 import { offlineUpsertDailyLog } from "@/lib/offline/mutations";
 import { Badge } from "@/components/ui/Badge";
@@ -27,16 +40,33 @@ type PlanMeal = {
   order_index: number;
 };
 
+const todayISO = () => new Date().toISOString().slice(0, 10);
+
 export function TodayPage() {
   const [plan, setPlan] = useState<Plan | null>(null);
-  const [meals, setMeals] = useState<PlanMeal[]>([]);
+  const [planMeals, setPlanMeals] = useState<PlanMeal[]>([]);
+  const [mealPlanData, setMealPlanData] = useState<{
+    plan: { id: string; calories_target: number; goal: string };
+    items: UserMealPlanItem[];
+  } | null>(null);
+  const [consumed, setConsumed] = useState<{ totalKcal: number; consumedItemIds: string[] }>({
+    totalKcal: 0,
+    consumedItemIds: [],
+  });
+  const [todayNote, setTodayNote] = useState("");
+  const [anamnesis, setAnamnesis] = useState<Anamnesis | null>(null);
   const [water, setWater] = useState({ current: 1200, goal: 2500 });
   const [progress, setProgress] = useState({ streak: 5, weeklyDelta: "-1,2 kg" });
   const [loading, setLoading] = useState(true);
   const [seedLoading, setSeedLoading] = useState(false);
   const [fastingEnabled, setFastingEnabled] = useState(false);
   const [fastingToday, setFastingToday] = useState(false);
+  const [swapItem, setSwapItem] = useState<UserMealPlanItem | null>(null);
+  const [swapSuggestions, setSwapSuggestions] = useState<Array<{ id: string; title: string; kcal: number | null }>>([]);
+  const [swapLoading, setSwapLoading] = useState(false);
+  const [noteSaving, setNoteSaving] = useState(false);
 
+  const todayStr = useMemo(() => todayISO(), []);
   const todayIndex = useMemo(() => {
     const d = new Date();
     const day = d.getDay();
@@ -51,50 +81,57 @@ export function TodayPage() {
     if (!user) {
       setLoading(false);
       setPlan(null);
-      setMeals([]);
+      setPlanMeals([]);
+      setMealPlanData(null);
       return;
     }
 
-    const { data: p, error: planError } = await supabase
-      .from("daily_plans")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("day_index", todayIndex)
-      .maybeSingle();
+    const [planRes, mealPlanRes, consumedRes, noteContent, anamRes] = await Promise.all([
+      supabase
+        .from("daily_plans")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("day_index", todayIndex)
+        .maybeSingle(),
+      getTodayPlan(supabase, user.id, todayStr),
+      getConsumedToday(supabase, user.id, todayStr),
+      getNote(supabase, user.id, todayStr),
+      supabase.from("user_anamnesis").select("*").eq("user_id", user.id).maybeSingle(),
+    ]);
 
-    if (planError) console.error("[TodayPage] daily_plans:", planError);
-
-    if (p) {
-      setPlan(p as Plan);
-      setWater((w) => ({ ...w, goal: (p as Plan).water_goal_ml }));
-
-      const { data: pm, error: mealsError } = await supabase
+    if (planRes.data) {
+      setPlan(planRes.data as Plan);
+      setWater((w) => ({ ...w, goal: (planRes.data as Plan).water_goal_ml }));
+      const { data: pm } = await supabase
         .from("plan_meals")
         .select("*")
-        .eq("plan_id", (p as Plan).id)
+        .eq("plan_id", (planRes.data as Plan).id)
         .order("order_index", { ascending: true });
-
-      if (mealsError) console.error("[TodayPage] plan_meals:", mealsError);
-      setMeals((pm ?? []) as PlanMeal[]);
-    }
-    if (!p) {
+      setPlanMeals((pm ?? []) as PlanMeal[]);
+    } else {
       setPlan(null);
-      setMeals([]);
+      setPlanMeals([]);
     }
 
-    const todayStr = new Date().toISOString().slice(0, 10);
+    if (mealPlanRes) setMealPlanData(mealPlanRes);
+    else setMealPlanData(null);
+
+    setConsumed({
+      totalKcal: consumedRes.totalKcal,
+      consumedItemIds: consumedRes.consumedItemIds,
+    });
+    setTodayNote(noteContent ?? "");
+    if (anamRes.data) setAnamnesis(anamRes.data as Anamnesis);
+
+    const todayStr2 = todayISO();
     const { data: log } = await supabase
       .from("daily_logs")
       .select("water_ml, fasting_today")
       .eq("user_id", user.id)
-      .eq("date", todayStr)
+      .eq("date", todayStr2)
       .maybeSingle();
-    if (log?.water_ml != null) {
-      setWater((w) => ({ ...w, current: log.water_ml }));
-    }
-    if (log?.fasting_today != null) {
-      setFastingToday(!!log.fasting_today);
-    }
+    if (log?.water_ml != null) setWater((w) => ({ ...w, current: log.water_ml }));
+    if (log?.fasting_today != null) setFastingToday(!!log.fasting_today);
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -104,70 +141,58 @@ export function TodayPage() {
     setFastingEnabled(!!profile?.fasting_enabled);
 
     setLoading(false);
-  }, [todayIndex]);
+  }, [todayIndex, todayStr]);
 
-  const today = new Date().toISOString().slice(0, 10);
+  useEffect(() => {
+    fetchToday();
+  }, [fetchToday]);
 
   async function saveFastingToday(value: boolean) {
     const online = typeof navigator !== "undefined" && navigator.onLine;
     if (!online) {
-      await offlineUpsertDailyLog({ date: today, fasting_today: value });
+      await offlineUpsertDailyLog({ date: todayStr, fasting_today: value });
       setFastingToday(value);
       toast.success("Salvo offline. Sincroniza quando voltar a conexão.");
       return;
     }
-    const {
-      data: { user: u },
-    } = await supabase.auth.getUser();
+    const { data: { user: u } } = await supabase.auth.getUser();
     if (!u) return;
     const { data: existing } = await supabase
       .from("daily_logs")
       .select("water_ml, workout_done, meals_logged, weight_kg")
       .eq("user_id", u.id)
-      .eq("date", today)
+      .eq("date", todayStr)
       .maybeSingle();
     const payload = {
       user_id: u.id,
-      date: today,
+      date: todayStr,
       ...(existing ?? {}),
       fasting_today: value,
     };
     const { error } = await supabase.from("daily_logs").upsert(payload, {
       onConflict: "user_id,date",
     });
-    if (!error) {
-      setFastingToday(value);
-    } else {
-      toast.error("Erro ao salvar.");
-    }
+    if (!error) setFastingToday(value);
+    else toast.error("Erro ao salvar.");
   }
 
   async function saveWater(water_ml: number) {
     const online = typeof navigator !== "undefined" && navigator.onLine;
     if (!online) {
-      await offlineUpsertDailyLog({ date: today, water_ml });
+      await offlineUpsertDailyLog({ date: todayStr, water_ml });
       setWater((w) => ({ ...w, current: water_ml }));
       toast.success("Salvo offline. Sincroniza quando voltar a conexão.");
       return;
     }
-    const {
-      data: { user: u },
-    } = await supabase.auth.getUser();
+    const { data: { user: u } } = await supabase.auth.getUser();
     if (!u) return;
     const { error } = await supabase.from("daily_logs").upsert(
-      { user_id: u.id, date: today, water_ml },
+      { user_id: u.id, date: todayStr, water_ml },
       { onConflict: "user_id,date" }
     );
-    if (!error) {
-      setWater((w) => ({ ...w, current: water_ml }));
-    } else {
-      toast.error("Erro ao salvar.");
-    }
+    if (!error) setWater((w) => ({ ...w, current: water_ml }));
+    else toast.error("Erro ao salvar.");
   }
-
-  useEffect(() => {
-    fetchToday();
-  }, [fetchToday]);
 
   async function handleSeedNow() {
     setSeedLoading(true);
@@ -183,7 +208,99 @@ export function TodayPage() {
     }
   }
 
-  if (loading && !plan) {
+  async function handleGenerateMealPlan() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    setSeedLoading(true);
+    try {
+      const { ok, error } = await ensureMealPlan(user.id);
+      if (!ok) {
+        toast.error(error ?? "Erro ao gerar plano.");
+        return;
+      }
+      await fetchToday();
+      toast.success("Plano alimentar gerado para 7 dias.");
+    } catch (e) {
+      console.error("[TodayPage] handleGenerateMealPlan:", e);
+      toast.error("Erro ao gerar plano. Tente de novo.");
+    } finally {
+      setSeedLoading(false);
+    }
+  }
+
+  async function openSwap(item: UserMealPlanItem) {
+    setSwapItem(item);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const kcal = item.recipe?.kcal ?? 400;
+    const list = await getSuggestionsForSwap(
+      supabase,
+      anamnesis,
+      item.meal_type,
+      kcal,
+      item.recipe_id
+    );
+    setSwapSuggestions(list);
+  }
+
+  async function confirmSwap(newRecipeId: string) {
+    if (!swapItem) return;
+    setSwapLoading(true);
+    const { ok, error } = await swapMealItem(supabase, swapItem.id, newRecipeId);
+    setSwapLoading(false);
+    if (ok) {
+      setSwapItem(null);
+      toast.success("Refeição trocada.");
+      fetchToday();
+    } else {
+      toast.error(error ?? "Erro ao trocar.");
+    }
+  }
+
+  async function toggleConsumed(item: UserMealPlanItem) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const isConsumed = consumed.consumedItemIds.includes(item.id);
+    if (isConsumed) {
+      const { ok, error } = await unconsumeMeal(supabase, user.id, todayStr, item.id);
+      if (ok) {
+        setConsumed((c) => ({
+          totalKcal: c.totalKcal - (item.recipe?.kcal ?? 0),
+          consumedItemIds: c.consumedItemIds.filter((id) => id !== item.id),
+        }));
+        toast.success("Desmarcado.");
+      } else toast.error(error);
+    } else {
+      const { ok, error } = await consumeMeal(
+        supabase,
+        user.id,
+        todayStr,
+        item.id,
+        item.meal_type,
+        item.recipe_id
+      );
+      if (ok) {
+        setConsumed((c) => ({
+          totalKcal: c.totalKcal + (item.recipe?.kcal ?? 0),
+          consumedItemIds: [...c.consumedItemIds, item.id],
+        }));
+        toast.success("Marcado como consumido.");
+      } else toast.error(error);
+    }
+    fetchToday();
+  }
+
+  async function handleSaveNote() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    setNoteSaving(true);
+    const { ok, error } = await saveNotes(supabase, user.id, todayStr, todayNote);
+    setNoteSaving(false);
+    if (ok) toast.success("Nota salva.");
+    else toast.error(error ?? "Erro ao salvar.");
+  }
+
+  if (loading && !plan && !mealPlanData) {
     return (
       <div className="space-y-4">
         <div className="border border-border rounded-xl shadow-sm p-4 animate-pulse">
@@ -193,7 +310,6 @@ export function TodayPage() {
         <div className="border border-border rounded-xl shadow-sm p-4 animate-pulse">
           <div className="h-4 bg-zinc-200 rounded w-1/4" />
           <div className="h-3 bg-zinc-200 rounded w-full mt-3" />
-          <div className="h-3 bg-zinc-200 rounded w-2/3 mt-2" />
         </div>
       </div>
     );
@@ -201,6 +317,7 @@ export function TodayPage() {
 
   return (
     <div className="space-y-4">
+      {/* Treino (daily_plans) */}
       <section className="border border-border rounded-xl shadow-sm p-4 transition duration-250">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm text-zinc-500">📋 Plano de hoje</span>
@@ -217,9 +334,7 @@ export function TodayPage() {
           </>
         ) : (
           <div className="mt-2 space-y-2">
-            <div className="text-sm text-zinc-600">
-              Ainda não geramos seu plano inicial.
-            </div>
+            <div className="text-sm text-zinc-600">Ainda não geramos seu plano de treino.</div>
             <button
               onClick={handleSeedNow}
               disabled={seedLoading}
@@ -260,32 +375,73 @@ export function TodayPage() {
         </section>
       )}
 
+      {/* Refeições (user_meal_plans) */}
       <section className="border border-border rounded-xl shadow-sm p-4">
-        <div className="text-sm text-zinc-500">🍽️ Refeições</div>
-        <div className="mt-2 space-y-2">
-          {meals.length === 0 ? (
-            <div className="text-sm text-zinc-600">
-              {plan
-                ? "Nenhuma refeição neste plano."
-                : "Gere o plano acima para ver as refeições do dia."}
+        <div className="text-sm text-zinc-500">🍽️ Refeições do plano</div>
+        {mealPlanData ? (
+          <>
+            <div className="mt-2 flex items-center justify-between gap-2 text-sm text-zinc-600">
+              <span>Meta: {mealPlanData.plan.calories_target} kcal</span>
+              <span>Consumido: {consumed.totalKcal} kcal</span>
             </div>
-          ) : (
-            meals.map((m) => (
-              <div key={m.id} className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="font-medium">{m.meal_type}</div>
-                  <div className="text-sm text-zinc-600">{m.recipe_title}</div>
+            <div className="mt-2 space-y-2">
+              {mealPlanData.items.map((m) => (
+                <div
+                  key={m.id}
+                  className="flex items-start gap-3 rounded-lg border border-border p-3 bg-surface"
+                >
+                  <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-zinc-100 overflow-hidden flex items-center justify-center text-zinc-400 text-xl">
+                    {m.recipe?.image_url ? (
+                      <img src={m.recipe.image_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <span>🍽️</span>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium">{m.meal_type}</div>
+                    <div className="text-sm text-zinc-600">{m.recipe?.title ?? "—"}</div>
+                    <div className="text-xs text-zinc-500 mt-0.5">
+                      {m.recipe?.kcal != null ? `${m.recipe.kcal} kcal` : ""}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <button
+                      type="button"
+                      onClick={() => openSwap(m)}
+                      className="rounded-lg border border-border px-2 py-1.5 text-xs font-medium text-ink hover:bg-muted"
+                    >
+                      Trocar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleConsumed(m)}
+                      className={`rounded-lg border px-2 py-1.5 text-xs font-medium ${
+                        consumed.consumedItemIds.includes(m.id)
+                          ? "bg-green-100 border-green-300 text-green-800"
+                          : "border-border text-ink hover:bg-muted"
+                      }`}
+                    >
+                      {consumed.consumedItemIds.includes(m.id) ? "✓ Consumido" : "Marcar consumido"}
+                    </button>
+                  </div>
                 </div>
-                <div className="text-sm text-zinc-500 whitespace-nowrap">
-                  {m.kcal ? `${m.kcal} kcal` : ""}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-        <div className="mt-3 text-xs text-zinc-500">
-          Total estimado: {plan?.kcal_min ?? 1800}–{plan?.kcal_max ?? 2200} kcal (ajustável)
-        </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="mt-2 space-y-2">
+            <div className="text-sm text-zinc-600">
+              Gere seu plano alimentar (7 dias) para ver as refeições de hoje.
+            </div>
+            <button
+              onClick={handleGenerateMealPlan}
+              disabled={seedLoading}
+              className="w-full bg-primary-500 text-white py-3 rounded-xl shadow-sm transition duration-250 disabled:opacity-50 font-medium"
+            >
+              {seedLoading ? "Gerando plano..." : "Gerar plano agora"}
+            </button>
+          </div>
+        )}
       </section>
 
       <section className="border border-border rounded-xl shadow-sm p-4">
@@ -324,6 +480,71 @@ export function TodayPage() {
           Foque em consistência. Ajuste metas com segurança e, se possível, com orientação profissional.
         </div>
       </section>
+
+      {/* Notas do dia */}
+      <section className="border border-border rounded-xl shadow-sm p-4">
+        <div className="text-sm text-zinc-500">📝 Notas do dia</div>
+        <textarea
+          value={todayNote}
+          onChange={(e) => setTodayNote(e.target.value)}
+          onBlur={handleSaveNote}
+          placeholder="Anote como se sentiu, dúvidas, etc."
+          rows={3}
+          className="mt-2 w-full rounded-xl border border-border bg-surface text-ink placeholder-zinc-400 p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
+        />
+        <div className="mt-2 flex justify-end">
+          <button
+            type="button"
+            onClick={handleSaveNote}
+            disabled={noteSaving}
+            className="rounded-xl bg-primary-500 text-white px-4 py-2 text-sm font-medium disabled:opacity-50"
+          >
+            {noteSaving ? "Salvando..." : "Salvar nota"}
+          </button>
+        </div>
+      </section>
+
+      {/* Modal Trocar */}
+      {swapItem && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => !swapLoading && setSwapItem(null)}
+        >
+          <div
+            className="bg-surface border border-border rounded-xl shadow-lg max-w-md w-full p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="font-semibold text-ink">Trocar: {swapItem.meal_type}</div>
+            <div className="text-sm text-zinc-600 mt-1">Escolha uma sugestão (kcal similar)</div>
+            <div className="mt-3 space-y-2 max-h-64 overflow-y-auto">
+              {swapSuggestions.length === 0 && !swapLoading && (
+                <div className="text-sm text-zinc-500">Nenhuma sugestão no momento.</div>
+              )}
+              {swapSuggestions.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => confirmSwap(r.id)}
+                  disabled={swapLoading}
+                  className="w-full text-left rounded-lg border border-border p-3 hover:bg-muted transition flex justify-between items-center"
+                >
+                  <span className="font-medium text-ink">{r.title}</span>
+                  <span className="text-sm text-zinc-500">{r.kcal != null ? `${r.kcal} kcal` : ""}</span>
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSwapItem(null)}
+                className="rounded-xl border border-border px-4 py-2 text-sm text-ink hover:bg-muted"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
