@@ -18,6 +18,7 @@ type Recipe = {
   cheap: boolean | null;
   ingredients: string | null;
   instructions: string | null;
+  image_url?: string | null;
 };
 
 const MEAL_TYPES = ["Café da manhã", "Almoço", "Jantar", "Lanche"];
@@ -136,23 +137,32 @@ export function MealsPage() {
           {filtered.map((r) => (
             <div
               key={r.id}
-              className="border border-border rounded-xl shadow-card p-4 transition duration-250"
+              className="border border-border rounded-xl shadow-card p-4 transition duration-250 flex gap-3"
             >
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="font-semibold text-ink">{r.title}</div>
-                  <div className="text-sm text-zinc-600 mt-0.5">{r.meal_type}</div>
-                </div>
-                {r.kcal != null && (
-                  <span className="text-sm text-zinc-500 whitespace-nowrap">{r.kcal} kcal</span>
+              <div className="flex-shrink-0 w-20 h-20 rounded-lg bg-zinc-100 overflow-hidden flex items-center justify-center text-zinc-400 text-2xl">
+                {r.image_url ? (
+                  <img src={r.image_url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <span aria-hidden>🍽️</span>
                 )}
               </div>
-              {r.ingredients && (
-                <div className="text-sm text-zinc-500 mt-2 line-clamp-2">{r.ingredients}</div>
-              )}
-              {r.instructions && (
-                <div className="text-xs text-zinc-400 mt-1 line-clamp-2">{r.instructions}</div>
-              )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="font-semibold text-ink">{r.title}</div>
+                    <div className="text-sm text-zinc-600 mt-0.5">{r.meal_type}</div>
+                  </div>
+                  {r.kcal != null && (
+                    <span className="text-sm text-zinc-500 whitespace-nowrap">{r.kcal} kcal</span>
+                  )}
+                </div>
+                {r.ingredients && (
+                  <div className="text-sm text-zinc-500 mt-2 line-clamp-2">{r.ingredients}</div>
+                )}
+                {r.instructions && (
+                  <div className="text-xs text-zinc-400 mt-1 line-clamp-2">{r.instructions}</div>
+                )}
+              </div>
             </div>
           ))}
         </div>
