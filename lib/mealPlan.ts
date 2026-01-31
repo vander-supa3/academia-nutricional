@@ -252,7 +252,9 @@ export async function getConsumedToday(
     user_meal_plan_item_id,
     recipes: Array.isArray(r) ? r[0] : r,
   }));
-  const consumedItemIds = [...new Set(list.map((l) => l.user_meal_plan_item_id).filter(Boolean))] as string[];
+  const consumedItemIds = Array.from(
+    new Set(list.map((l) => l.user_meal_plan_item_id).filter((id): id is string => Boolean(id)))
+  );
   return { totalKcal, consumedItemIds, logs: list };
 }
 
