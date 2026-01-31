@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase-server";
 
+export const runtime = "nodejs";
+
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
 
@@ -8,7 +10,12 @@ export async function POST(req: Request) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ ok: false }, { status: 401 });
+  if (!user) {
+    return NextResponse.json(
+      { ok: false, error: "Faça login novamente. Sessão não encontrada." },
+      { status: 401 }
+    );
+  }
 
   const fasting_style = (body.fasting_style ?? "nao") as string;
   const fasting_days_per_week =

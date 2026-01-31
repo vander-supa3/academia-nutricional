@@ -87,7 +87,37 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=sua-anon-key-aqui
 
 3. Salve o arquivo. O `.env.local` **não** é commitado (está no `.gitignore`).
 
-### 2.4 Configurar variáveis no GitHub (quando usar CI/deploy)
+### 2.4 Aplicar schema e migrations no Supabase (Opção A)
+
+Para o app funcionar (receitas, treinos, planos, perfis), o banco precisa das tabelas e das policies. Use **uma** das formas abaixo.
+
+**Via CLI (recomendado)**
+
+Com o [Supabase CLI](https://supabase.com/docs/guides/cli) instalado e linkado ao projeto:
+
+```bash
+supabase db push
+```
+
+Isso aplica as migrations na ordem (002, 003, 004, 005…). O schema base (`supabase/schema.sql`) deve ter sido aplicado antes ou estar incluído na sua configuração inicial do Supabase.
+
+**Via Supabase SQL Editor**
+
+1. **Primeiro:** rode o **schema base** que cria as tabelas (`recipes`, `workouts`, `daily_plans`, `profiles`, `daily_logs`, etc.).
+   - Abra **Supabase → SQL Editor → New query**.
+   - Cole o conteúdo de **`supabase/schema.sql`** e execute.
+
+2. **Depois:** rode as **migrations em ordem** (cada arquivo em uma query, na sequência):
+   - `supabase/migrations/002_add_indexes.sql`
+   - `supabase/migrations/003_fasting_preferences.sql`
+   - `supabase/migrations/004_ai_threads.sql`
+   - `supabase/migrations/005_rls_public_and_auth_trigger.sql`
+
+**Importante:** a **005** deve ser rodada **depois** que as tabelas existirem (ela habilita RLS e cria policies em cima delas). Se rodar antes do schema, dará erro de “relation does not exist”.
+
+Depois de aplicar tudo, rode o seed global para popular receitas e treinos: `npm run seed:global` (com `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` no `.env.local`).
+
+### 2.5 Configurar variáveis no GitHub (quando usar CI/deploy)
 
 Se for usar GitHub Actions ou deploy (ex.: Vercel):
 
@@ -98,7 +128,7 @@ Se for usar GitHub Actions ou deploy (ex.: Vercel):
 
 Assim o código não fica com as chaves no repositório.
 
-### 2.5 Testar a conexão
+### 2.6 Testar a conexão
 
 Com o `.env.local` preenchido:
 
@@ -174,9 +204,26 @@ Cada novo **push** na branch **main** no GitHub dispara um deploy automático.
 
 ---
 
+## Teste rápido (Supabase) — em 1 minuto
+
+No **Supabase → SQL Editor**, rode:
+
+```sql
+select count(*) as recipes from public.recipes;
+select count(*) as workouts from public.workouts;
+select count(*) as exercises from public.workout_exercises;
+```
+
+- **recipes/workouts = 0** → rode `npm run seed:global` no projeto certo (`.env.local` com `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` do mesmo projeto).
+- **"permission denied"** → RLS/policy: aplique `supabase/migrations/005_rls_public_and_auth_trigger.sql` (leitura pública em recipes/workouts + trigger de profile + policies).
+- **"relation does not exist"** → aplique `supabase/schema.sql` e as migrations (002, 003, 004, 005).
+
+---
+
 ## Arquivos do projeto relacionados
 
 - **`.env.example`** — modelo das variáveis (sem valores reais); você copia para `.env.local` e preenche.
 - **`lib/supabase.ts`** — cliente Supabase usado no app (lê `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY`).
+- **`lib/supabase-server.ts`** — cliente SSR para Route Handlers (cookies get/set/remove).
 
 Se quiser, o próximo passo pode ser criar uma tabela no Supabase (ex.: usuários ou planos) e uma tela no Next.js que leia esses dados.

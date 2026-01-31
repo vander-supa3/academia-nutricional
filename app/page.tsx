@@ -1,34 +1,16 @@
-"use client";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase-server";
+import { Landing } from "@/components/Landing";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+export default async function HomePage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-export default function HomePage() {
-  const router = useRouter();
-  const [checking, setChecking] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        router.replace("/hoje");
-      } else {
-        router.replace("/login");
-      }
-      setChecking(false);
-    })();
-  }, [router]);
-
-  if (checking) {
-    return (
-      <div className="min-h-dvh flex items-center justify-center bg-white">
-        <div className="text-zinc-500 text-sm">Carregando...</div>
-      </div>
-    );
+  if (user) {
+    redirect("/hoje");
   }
 
-  return null;
+  return <Landing />;
 }

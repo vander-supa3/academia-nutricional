@@ -22,6 +22,9 @@ const withPWA = require("@ducanh2912/next-pwa").default({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  async rewrites() {
+    return [{ source: "/manifest.webmanifest", destination: "/manifest" }];
+  },
   async headers() {
     return [
       {

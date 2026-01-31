@@ -48,6 +48,7 @@ export function PreferenciasJejum() {
     try {
       const res = await fetch("/api/profile/fasting", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fasting_enabled: style !== "nao",

@@ -6,6 +6,9 @@ import { supabase } from "@/lib/supabase";
 import { cachedFetch } from "@/lib/offline/cachedQuery";
 import { useOnline } from "@/lib/offline/useOnline";
 import { Search } from "lucide-react";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { CardSkeleton } from "@/components/ui/LoadingSkeleton";
 
 type Recipe = {
   id: string;
@@ -18,16 +21,6 @@ type Recipe = {
 };
 
 const MEAL_TYPES = ["Café da manhã", "Almoço", "Jantar", "Lanche"];
-
-function RecipeCardSkeleton() {
-  return (
-    <div className="border border-border rounded-xl shadow-card p-4 animate-pulse">
-      <div className="h-4 bg-zinc-200 rounded w-2/3" />
-      <div className="h-3 bg-zinc-200 rounded w-1/2 mt-2" />
-      <div className="h-3 bg-zinc-200 rounded w-full mt-2" />
-    </div>
-  );
-}
 
 export function MealsPage() {
   const [search, setSearch] = useState("");
@@ -107,29 +100,37 @@ export function MealsPage() {
       {isLoading ? (
         <div className="space-y-3">
           {[1, 2, 3, 4].map((i) => (
-            <RecipeCardSkeleton key={i} />
+            <CardSkeleton key={i} />
           ))}
         </div>
       ) : error ? (
-        <div className="border border-border rounded-xl shadow-card p-4 space-y-3">
-          <p className="text-sm text-red-600">
-            Erro ao carregar receitas. Confira: (1) Tabela &quot;recipes&quot; existe no Supabase? (rode <code className="text-xs bg-zinc-100 px-1 rounded">supabase/schema.sql</code>), (2) Rodou <code className="text-xs bg-zinc-100 px-1 rounded">npm run seed:global</code>? (3) Conexão com a internet.
-          </p>
-          <p className="text-xs font-mono text-red-700 bg-red-50 border border-red-200 rounded-lg p-2 break-all">
-            Causa: {(error as Error)?.message ?? String(error)}
-          </p>
-          <button
-            type="button"
-            onClick={() => refetch()}
-            className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-ink hover:bg-muted transition"
-          >
-            Tentar de novo
-          </button>
-        </div>
+        <ErrorState
+          title="Erro ao carregar receitas"
+          message={(error as Error)?.message ?? String(error)}
+          action={
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="rounded-xl border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 transition"
+            >
+              Tentar de novo
+            </button>
+          }
+        />
       ) : filtered.length === 0 ? (
-        <div className="border border-border rounded-xl shadow-card p-4 text-sm text-zinc-600">
-          Nenhuma receita encontrada. Rode o seed global (npm run seed:global).
-        </div>
+        <EmptyState
+          title="Nenhuma receita encontrada"
+          description="Rode o seed global (npm run seed:global) ou ajuste os filtros."
+          action={
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-ink hover:bg-muted transition"
+            >
+              Atualizar
+            </button>
+          }
+        />
       ) : (
         <div className="space-y-3">
           {filtered.map((r) => (
